@@ -12,4 +12,4 @@ INTERACTION_LOG_COLLECTION = DB['interaction_logs']
 ASSISTANTS_COLLECTION = DB['assistants']
 REQUIRED_VERSION = version.parse("1.1.1")
 CURRENT_VERSION = version.parse(openai.__version__)
-OPENAI_API_KEY = "sk-proj-HD5DZnNoQwsKDzQltJ9VT3BlbkFJbY0gjMbKqWV6R1W62pwJ"
+OPENAI_API_KEY = "KEY"
