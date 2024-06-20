@@ -1,15 +1,16 @@
-from packaging import version
-from pymongo import MongoClient
+""" 
+Settings file to manage the env variables or variables 
+used around the solution in runtime 
+"""
+import os.path
 
 import openai
+from packaging import version
 
-
-MONGO_CLIENT = MongoClient('mongodb://localhost:27017/')
-DB = MONGO_CLIENT['fitness_db']
-USERS_COLLECTION = DB['users']
-PROGRESS_COLLECTION = DB['progress']
-INTERACTION_LOG_COLLECTION = DB['interaction_logs']
-ASSISTANTS_COLLECTION = DB['assistants']
+MONGO_URI = "mongodb://localhost:27017/"
+MONGO_DB = "fitness_db"
 REQUIRED_VERSION = version.parse("1.1.1")
 CURRENT_VERSION = version.parse(openai.__version__)
-OPENAI_API_KEY = "KEY"
+OPENAI_API_KEY = ""
+
+REPORT_ASSISTANT_PATH = os.path.abspath(os.path.join("assets", "report_assistant.json"))
