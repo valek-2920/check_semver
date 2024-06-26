@@ -122,10 +122,10 @@ if __name__ == "__main__":
     generator = ReportGenerator(client, "admin")
     generator.start_assistant_generator()
 
-    user_id = "user_123"
+    user_id = "user_71445897"
     conversation_col = generator.db["conversation"]
     conversation = conversation_col.find_one({"user_id": user_id})
-    chat = conversation["messages"]
+    chat = str(conversation["messages"])
 
     generator.start_report_generation(chat)
 

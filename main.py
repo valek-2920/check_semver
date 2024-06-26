@@ -60,7 +60,7 @@ class TrainerGenerator:
         """
         Initiate the conversation with the assistant generated and save its ID
         """
-        conversation = self.assistant_col.find_one({"user_id": self.user_id})
+        conversation = self.conversation_col.find_one({"user_id": self.user_id})
 
         if conversation:
             self.thread_id = conversation["thread_id"]
@@ -72,7 +72,7 @@ class TrainerGenerator:
                 conversation_data = {
                     'user_id': self.user_id,
                     'assistant_id': self.assistant_id,
-                    'thread_id': self.thread_id,
+                    'thread_id': thread.id,
                     'messages': [],
                     'run_id': None,
                     'status': 'in_progress',
