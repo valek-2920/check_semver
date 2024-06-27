@@ -1,9 +1,8 @@
 import os
-import time
 from flask import Flask, request, jsonify
 import openai
 from openai import OpenAI
-import functions
+from main import TrainerGenerator
 
 from packaging import version
 from data.mongo import close_db
@@ -37,17 +36,20 @@ def create_app():
 app = create_app()
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Load assistant ID from file or create new one
-assistant_id = functions.create_assistant(client)
-print("Assistant created with ID:", assistant_id)
-
-
 # Create thread
 @app.route("/start", methods=["GET"])
 def start_conversation():
-    thread = client.beta.threads.create()
-    print("New conversation started with thread ID:", thread.id)
-    return jsonify({"thread_id": thread.id})
+    user_phone_number = request.headers.get('User-Phone-Number')
+
+    if not user_phone_number:
+        print("Error: Missing user_phone_number in /chat")
+        return jsonify({"error": "Missing user_phone_number"}), 400
+
+    trainer = TrainerGenerator(client=client, user_id=user_phone_number)
+    trainer.start_conversation()
+
+    print("New conversation started with thread ID:", trainer.thread_id)
+    return jsonify({"thread_id": trainer.thread_id})
 
 
 # Start run
@@ -57,20 +59,22 @@ def chat():
     thread_id = data.get("thread_id")
     user_input = data.get("message", "")
 
+    user_phone_number = request.headers.get('User-Phone-Number')
+
+    if not user_phone_number:
+        print("Error: Missing user_phone_number in /chat")
+        return jsonify({"error": "Missing user_phone_number"}), 400
+
     if not thread_id:
         print("Error: Missing thread_id in /chat")
         return jsonify({"error": "Missing thread_id"}), 400
     print("Received message for thread ID:", thread_id, "Message:", user_input)
 
-    # Start run and send run ID back to ManyChat
-    client.beta.threads.messages.create(
-        thread_id=thread_id, role="user", content=user_input
-    )
-    run = client.beta.threads.runs.create(
-        thread_id=thread_id, assistant_id=assistant_id
-    )
-    print("Run started with ID:", run.id)
-    return jsonify({"run_id": run.id})
+    trainer = TrainerGenerator(client=client, user_id=user_phone_number)
+    trainer.chat(message=user_input)
+
+    print("Run started with ID:", trainer.run_id)
+    return jsonify({"run_id": trainer.run_id})
 
 
 # Check status of run
@@ -84,29 +88,28 @@ def check_run_status():
         print("Error: Missing thread_id or run_id in /check")
         return jsonify({"response": "error"})
 
-    # Start timer ensuring no more than 9 seconds, ManyChat timeout is 10s
-    start_time = time.time()
-    while time.time() - start_time < 8:
-        run_status = client.beta.threads.runs.retrieve(
-            thread_id=thread_id, run_id=run_id
-        )
-        print("Checking run status:", run_status.status)
+    user_phone_number = request.headers.get('User-Phone-Number')
 
-        if run_status.status == "completed":
-            messages = client.beta.threads.messages.list(thread_id=thread_id)
-            message_content = messages.data[0].content[0].text
-            # Remove annotations
-            annotations = message_content.annotations
-            for annotation in annotations:
-                message_content.value = message_content.value.replace(
-                    annotation.text, ""
-                )
-            print("Run completed, returning response")
-            return jsonify({"response": message_content.value, "status": "completed"})
-        time.sleep(1)
+    if not user_phone_number:
+        print("Error: Missing user_phone_number in /chat")
+        return jsonify({"error": "Missing user_phone_number"}), 400
+    
+    trainer = TrainerGenerator(client=client, user_id=user_phone_number)
+    trainer.thread_id = thread_id
+    trainer.run_id = run_id
 
-    print("Run timed out")
-    return jsonify({"response": "timeout"})
+    message = trainer.check_run_status()
+
+    if("Timeout" in message):
+         return jsonify({"response": message})
+
+    return jsonify({"response": message, "status": "completed"})
+
+
+# Get user reports
+@app.route("/user/reports", methods=["GET"])
+def get_user_reports():
+    return jsonify({"response": "user_reports"})
 
 
 if __name__ == "__main__":
