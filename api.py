@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 import openai
 from openai import OpenAI
 from main import TrainerGenerator
@@ -9,7 +9,7 @@ from data.mongo import close_db
 
 required_version = version.parse("1.1.1")
 current_version = version.parse(openai.__version__)
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if current_version < required_version:
     raise ValueError(
@@ -17,6 +17,9 @@ if current_version < required_version:
     )
 else:
     print("OpenAI version is compatible.")
+
+
+user_instances = {}
 
 
 def create_app():
@@ -34,76 +37,76 @@ def create_app():
     return app
 
 app = create_app()
-client = OpenAI(api_key=OPENAI_API_KEY)
+
+def get_user_instance(user_id):
+    """Retrieve or create an instance for the given user_id."""
+    if user_id not in user_instances:
+        user_instances[user_id] = TrainerGenerator(client=g.openai_client, user_id=user_id)
+    return user_instances[user_id]
+
+
+@app.before_request
+def before_request():
+    """Store the user instance in Flask's g object before each request."""
+    user_id = f"user_{request.headers.get('User-Phone-Number')}"
+    g.openai_client = OpenAI(api_key=OPENAI_API_KEY)
+
+    if user_id:
+        g.user_instance = get_user_instance(user_id)
+    else:
+        return jsonify({"error": "User-Phone-Number header is missing"}), 400
+
 
 # Create thread
 @app.route("/start", methods=["GET"])
 def start_conversation():
-    user_phone_number = request.headers.get('User-Phone-Number')
+    user_instance = g.user_instance
+    user_instance.start_conversation()
 
-    if not user_phone_number:
-        print("Error: Missing user_phone_number in /chat")
-        return jsonify({"error": "Missing user_phone_number"}), 400
-
-    trainer = TrainerGenerator(client=client, user_id=user_phone_number)
-    trainer.start_conversation()
-
-    print("New conversation started with thread ID:", trainer.thread_id)
-    return jsonify({"thread_id": trainer.thread_id})
+    print("New conversation started with thread ID:", user_instance.thread_id)
+    return jsonify({"thread_id": user_instance.thread_id})
 
 
 # Start run
 @app.route("/chat", methods=["POST"])
 def chat():
+    user_instance = g.user_instance
     data = request.json
     thread_id = data.get("thread_id")
     user_input = data.get("message", "")
 
-    user_phone_number = request.headers.get('User-Phone-Number')
-
-    if not user_phone_number:
-        print("Error: Missing user_phone_number in /chat")
-        return jsonify({"error": "Missing user_phone_number"}), 400
-
     if not thread_id:
         print("Error: Missing thread_id in /chat")
         return jsonify({"error": "Missing thread_id"}), 400
+
     print("Received message for thread ID:", thread_id, "Message:", user_input)
+    user_instance.chat(message=user_input)
 
-    trainer = TrainerGenerator(client=client, user_id=user_phone_number)
-    trainer.chat(message=user_input)
-
-    print("Run started with ID:", trainer.run_id)
-    return jsonify({"run_id": trainer.run_id})
+    print("Run started with ID:", user_instance.run_id)
+    return jsonify({"run_id": user_instance.run_id})
 
 
 # Check status of run
 @app.route("/check", methods=["POST"])
 def check_run_status():
+    user_instance = g.user_instance
     data = request.json
     thread_id = data.get("thread_id")
     run_id = data.get("run_id")
 
     if not thread_id or not run_id:
         print("Error: Missing thread_id or run_id in /check")
-        return jsonify({"response": "error"})
+        return jsonify({"error": "There is no thread_id nor run_id"}), 400
 
-    user_phone_number = request.headers.get('User-Phone-Number')
+    while True:
+        message = user_instance.check_run_status()
 
-    if not user_phone_number:
-        print("Error: Missing user_phone_number in /chat")
-        return jsonify({"error": "Missing user_phone_number"}), 400
-    
-    trainer = TrainerGenerator(client=client, user_id=user_phone_number)
-    trainer.thread_id = thread_id
-    trainer.run_id = run_id
-
-    message = trainer.check_run_status()
-
-    if("Timeout" in message):
-         return jsonify({"response": message})
-
-    return jsonify({"response": message, "status": "completed"})
+        if message:
+            if "Timeout" in message:
+                continue
+            return jsonify({"response": message, "status": "completed"})
+        else:
+            return jsonify({"Error": "There was a problem generating the answer, try again later"}), 500
 
 
 # Get user reports
