@@ -1,5 +1,5 @@
+from flask import g
 from pymongo import MongoClient
-# from flask import g
 
 import settings as s
 

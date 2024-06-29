@@ -1,16 +1,15 @@
 import os
-import time
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 import openai
 from openai import OpenAI
-import functions
+from main import TrainerGenerator
 
 from packaging import version
 from data.mongo import close_db
 
 required_version = version.parse("1.1.1")
 current_version = version.parse(openai.__version__)
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if current_version < required_version:
     raise ValueError(
@@ -18,6 +17,9 @@ if current_version < required_version:
     )
 else:
     print("OpenAI version is compatible.")
+
+
+user_instances = {}
 
 
 def create_app():
@@ -35,24 +37,40 @@ def create_app():
     return app
 
 app = create_app()
-client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Load assistant ID from file or create new one
-assistant_id = functions.create_assistant(client)
-print("Assistant created with ID:", assistant_id)
+def get_user_instance(user_id):
+    """Retrieve or create an instance for the given user_id."""
+    if user_id not in user_instances:
+        user_instances[user_id] = TrainerGenerator(client=g.openai_client, user_id=user_id)
+    return user_instances[user_id]
+
+
+@app.before_request
+def before_request():
+    """Store the user instance in Flask's g object before each request."""
+    user_id = f"user_{request.headers.get('User-Phone-Number')}"
+    g.openai_client = OpenAI(api_key=OPENAI_API_KEY)
+
+    if user_id:
+        g.user_instance = get_user_instance(user_id)
+    else:
+        return jsonify({"error": "User-Phone-Number header is missing"}), 400
 
 
 # Create thread
 @app.route("/start", methods=["GET"])
 def start_conversation():
-    thread = client.beta.threads.create()
-    print("New conversation started with thread ID:", thread.id)
-    return jsonify({"thread_id": thread.id})
+    user_instance = g.user_instance
+    user_instance.start_conversation()
+
+    print("New conversation started with thread ID:", user_instance.thread_id)
+    return jsonify({"thread_id": user_instance.thread_id})
 
 
 # Start run
 @app.route("/chat", methods=["POST"])
 def chat():
+    user_instance = g.user_instance
     data = request.json
     thread_id = data.get("thread_id")
     user_input = data.get("message", "")
@@ -60,53 +78,41 @@ def chat():
     if not thread_id:
         print("Error: Missing thread_id in /chat")
         return jsonify({"error": "Missing thread_id"}), 400
-    print("Received message for thread ID:", thread_id, "Message:", user_input)
 
-    # Start run and send run ID back to ManyChat
-    client.beta.threads.messages.create(
-        thread_id=thread_id, role="user", content=user_input
-    )
-    run = client.beta.threads.runs.create(
-        thread_id=thread_id, assistant_id=assistant_id
-    )
-    print("Run started with ID:", run.id)
-    return jsonify({"run_id": run.id})
+    print("Received message for thread ID:", thread_id, "Message:", user_input)
+    user_instance.chat(message=user_input)
+
+    print("Run started with ID:", user_instance.run_id)
+    return jsonify({"run_id": user_instance.run_id})
 
 
 # Check status of run
 @app.route("/check", methods=["POST"])
 def check_run_status():
+    user_instance = g.user_instance
     data = request.json
     thread_id = data.get("thread_id")
     run_id = data.get("run_id")
 
     if not thread_id or not run_id:
         print("Error: Missing thread_id or run_id in /check")
-        return jsonify({"response": "error"})
+        return jsonify({"error": "There is no thread_id nor run_id"}), 400
 
-    # Start timer ensuring no more than 9 seconds, ManyChat timeout is 10s
-    start_time = time.time()
-    while time.time() - start_time < 8:
-        run_status = client.beta.threads.runs.retrieve(
-            thread_id=thread_id, run_id=run_id
-        )
-        print("Checking run status:", run_status.status)
+    while True:
+        message = user_instance.check_run_status()
 
-        if run_status.status == "completed":
-            messages = client.beta.threads.messages.list(thread_id=thread_id)
-            message_content = messages.data[0].content[0].text
-            # Remove annotations
-            annotations = message_content.annotations
-            for annotation in annotations:
-                message_content.value = message_content.value.replace(
-                    annotation.text, ""
-                )
-            print("Run completed, returning response")
-            return jsonify({"response": message_content.value, "status": "completed"})
-        time.sleep(1)
+        if message:
+            if "Timeout" in message:
+                continue
+            return jsonify({"response": message, "status": "completed"})
+        else:
+            return jsonify({"Error": "There was a problem generating the answer, try again later"}), 500
 
-    print("Run timed out")
-    return jsonify({"response": "timeout"})
+
+# Get user reports
+@app.route("/user/reports", methods=["GET"])
+def get_user_reports():
+    return jsonify({"response": "user_reports"})
 
 
 if __name__ == "__main__":
