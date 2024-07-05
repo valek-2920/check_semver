@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # expose port 8000
-EXPOSE 8000
+EXPOSE 80
 
 # start flask app using Gunicorn
-CMD gunicorn -w 4 -b :8000 src.app:app
+CMD gunicorn -w 4 -b :80 --access-logfile - --error-logfile - --log-level debug src.app:app

@@ -3,7 +3,7 @@ from data.mongo import get_db
 from datetime import datetime
 import time
 from openai import OpenAI
-from prompts import user_profile_generation, factory_generation_instructions
+from utils.prompts import user_profile_generation, factory_generation_instructions
 
 import settings as s
 
@@ -60,7 +60,7 @@ class ReportGenerator:
         except Exception as e:
             print(f"There was a problem with the creation of a new thread, error {e}")
 
-    def start_report_generation(self, chat: str):
+    def start_report_generation(self, chat: str) -> str:
         """ TODO: Create docstring """
         instructions = factory_generation_instructions\
             .replace("[CHAT]", chat)
@@ -82,8 +82,8 @@ class ReportGenerator:
         if answer:
             if answer == "Timeout":
                 print("Timeout error")
-                return
-            print(answer)
+                return ""
+            return answer
 
     def check_run_status(self):
         """ Check the current status of the assistant, and it's answer """
@@ -115,17 +115,3 @@ class ReportGenerator:
 
         print("Run timed out")
         return "Timeout"
-
-
-if __name__ == "__main__":
-    client = OpenAI(api_key=s.OPENAI_API_KEY, default_headers={"OpenAI-Beta": "assistants=v2"})
-    generator = ReportGenerator(client, "admin")
-    generator.start_assistant_generator()
-
-    user_id = "user_71445897"
-    conversation_col = generator.db["conversation"]
-    conversation = conversation_col.find_one({"user_id": user_id})
-    chat = str(conversation["messages"])
-
-    generator.start_report_generation(chat)
-

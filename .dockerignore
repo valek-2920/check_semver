@@ -1,2 +1,3 @@
-data/*
+copy.env
+.github/*
 .git
