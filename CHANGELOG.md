@@ -1,3 +1,11 @@
+## 0.2.2 (2024-07-07)
+
+### Fix
+
+- **ffff**: ff
+- **asdf**: asdf
+- **bump_and_deploy.yml**: update
+
 ## 0.2.1 (2024-07-07)
 
 ### Fix
