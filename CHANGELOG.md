@@ -1,3 +1,13 @@
+## 0.2.0 (2024-07-07)
+
+### Feat
+
+- **bump_and_deploy.yml**: add deploy job
+
+### Fix
+
+- **bump_and_deploy.yml**: update job name
+
 ## 0.1.0 (2024-07-07)
 
 ### Feat
