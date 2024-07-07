@@ -1,3 +1,13 @@
+## 0.3.0 (2024-07-07)
+
+### Feat
+
+- **bleh**: add everything
+
+### Fix
+
+- **conflitcs**: solve
+
 ## 0.2.3 (2024-07-07)
 
 ### Fix
