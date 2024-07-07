@@ -1,0 +1,27 @@
+name: Bump version and deploy to ACR
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  bump-version:
+    if: "!startsWith(github.event.head_commit.message, 'bump:')"
+    runs-on: ubuntu-latest
+    name: "Bump version and create changelog with commitizen"
+    steps:
+
+      - name: Check out
+        uses: actions/checkout@v3
+        with:
+          token: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
+          fetch-depth: 0
+
+      - name: Create bump and changelog
+        uses: commitizen-tools/commitizen-action@main
+        with:
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: Set output version
+        run: echo "::set-output name=version::$(echo ${{ steps.commitizen.outputs.version }} | cut -c2-)"
