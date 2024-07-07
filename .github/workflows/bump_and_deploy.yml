@@ -21,7 +21,7 @@ jobs:
 
       - name: Create bump and changelog
         id: commitizen
-        uses: commitizen-tools/commitizen-action@main
+        uses: commitizen-tools/commitizen-action@master
         with:
           github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
